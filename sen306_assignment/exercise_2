@@ -1,0 +1,48 @@
+
+// Added Taxcalculator and Logger to the checkout process to handle tax calculations and logging of checkout attempts.
+
+public class CheckoutFacade {
+    private Inventory inventory;
+    private Payment payment;
+    private Shipping shipping;
+    private Email email;
+    private TaxCalculator taxCalculator;
+    private Logger logger;
+
+    public CheckoutFacade() {
+        this.inventory = new Inventory();
+        this.payment = new Payment();
+        this.shipping = new Shipping();
+        this.email = new Email();
+        this.taxCalculator = new TaxCalculator();
+        this.logger = new Logger();
+    }
+
+    public OrderResult checkout(String userId, String productId, double price, String address) {
+        if (!inventory.checkStock(productId)) {
+            logger.log(userId, false);
+            return new OrderResult(false, null, "Out of stock");
+        }
+
+        if (!shipping.isAvailable()) {
+            logger.log(userId, false);
+            return new OrderResult(false, null, "Shipping unavailable");
+        }
+
+        double tax = taxCalculator.compute(address, price);
+        double total = price + tax;
+
+        if (!payment.charge(userId, total)) {
+            logger.log(userId, false);
+            return new OrderResult(false, null, "Payment failed");
+        }
+
+        inventory.reserve(productId);
+        String label = shipping.createLabel(address);
+        shipping.schedulePickup(label);
+        email.send(userId, "Order Confirmed", "Total charged: " + total);
+
+        logger.log(userId, true);
+        return new OrderResult(true, label, "Order complete");
+    }
+}
